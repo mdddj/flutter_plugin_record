@@ -48,7 +48,7 @@ class _WeChatRecordScreenState extends State<WeChatRecordScreen> {
           ),
         );
       });
-      Overlay.of(context)?.insert(overlayEntry!);
+      Overlay.of(context).insert(overlayEntry!);
     }
   }
 
@@ -56,9 +56,9 @@ class _WeChatRecordScreenState extends State<WeChatRecordScreen> {
     print("开始录制");
   }
 
-  stopRecord(String path, double audioTimeLength) {
+  stopRecord(String? path, double? audioTimeLength) {
     print("结束束录制");
-    print("音频文件位置" + path);
+    print("音频文件位置:$path");
     print("音频录制时长" + audioTimeLength.toString());
   }
 
@@ -99,6 +99,9 @@ class _WeChatRecordScreenState extends State<WeChatRecordScreen> {
               stopRecord: stopRecord,
               // 加入定制化Container的相关属性
               height: 40.0,
+              builder: (String text, Widget defaultChild) {
+                return defaultChild;
+              },
             ),
           ],
         ),

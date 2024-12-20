@@ -1,30 +1,35 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_plugin_record/flutter_plugin_record.dart';
 import 'package:flutter_plugin_record/utils/common_toast.dart';
 
 import 'custom_overlay.dart';
 
-typedef startRecord = Future Function();
-typedef stopRecord = Future Function();
+// typedef startRecord = Future Function();
+// typedef stopRecord = Future Function();
+typedef VoiceWidgetBuilder = Widget Function(String text, Widget defaultChild);
 
 class VoiceWidget extends StatefulWidget {
   final Function? startRecord;
-  final Function? stopRecord;
+  final void Function(String? filepath, double? len)? stopRecord;
   final double? height;
   final EdgeInsets? margin;
   final Decoration? decoration;
+  final double cancelHeight; //向上滑动触发取消发生高度,默认手指向上滑动30表示关闭
+  final VoiceWidgetBuilder builder;
+  final int duration; //最大录制时长
 
   /// startRecord 开始录制回调  stopRecord回调
   const VoiceWidget(
-      {Key? key,
+      {super.key,
       this.startRecord,
       this.stopRecord,
       this.height,
       this.decoration,
-      this.margin})
-      : super(key: key);
+      this.cancelHeight = 30,
+      required this.builder,
+      this.margin,
+      this.duration = 30});
 
   @override
   _VoiceWidgetState createState() => _VoiceWidgetState();
@@ -32,7 +37,7 @@ class VoiceWidget extends StatefulWidget {
 
 class _VoiceWidgetState extends State<VoiceWidget> {
   // 倒计时总时长
-  int _countTotal = 12;
+  late final int _countTotal = widget.duration;
   double starty = 0.0;
   double offset = 0.0;
   bool isUp = false;
@@ -42,7 +47,7 @@ class _VoiceWidgetState extends State<VoiceWidget> {
 
   ///默认隐藏状态
   bool voiceState = true;
-  FlutterPluginRecord? recordPlugin;
+  FlutterPluginRecord recordPlugin = FlutterPluginRecord();
   Timer? _timer;
   int _count = 0;
   OverlayEntry? overlayEntry;
@@ -50,34 +55,32 @@ class _VoiceWidgetState extends State<VoiceWidget> {
   @override
   void initState() {
     super.initState();
-    recordPlugin = new FlutterPluginRecord();
-
+    debugPrint("_count :${widget.duration}");
     _init();
 
     ///初始化方法的监听
-    recordPlugin?.responseFromInit.listen((data) {
+    recordPlugin.responseFromInit.listen((data) {
       if (data) {
-        print("初始化成功");
+        debugPrint("初始化成功");
       } else {
-        print("初始化失败");
+        debugPrint("初始化失败");
       }
     });
 
     /// 开始录制或结束录制的监听
-    recordPlugin?.response.listen((data) {
+    recordPlugin.response.listen((data) {
       if (data.msg == "onStop") {
         ///结束录制时会返回录制文件的地址方便上传服务器
-        print("onStop  " + data.path!);
-        if (widget.stopRecord != null)
-          widget.stopRecord!(data.path, data.audioTimeLength);
+        debugPrint("onStop  ${data.path!}");
+        widget.stopRecord?.call(data.path, data.audioTimeLength);
       } else if (data.msg == "onStart") {
-        print("onStart --");
+        debugPrint("onStart --");
         if (widget.startRecord != null) widget.startRecord!();
       }
     });
 
     ///录制过程监听录制的声音的大小 方便做语音动画显示图片的样式
-    recordPlugin!.responseFromAmplitude.listen((data) {
+    recordPlugin.responseFromAmplitude.listen((data) {
       var voiceData = double.parse(data.msg ?? '');
       setState(() {
         if (voiceData > 0 && voiceData < 0.1) {
@@ -102,55 +105,55 @@ class _VoiceWidgetState extends State<VoiceWidget> {
         }
       });
 
-      print("振幅大小   " + voiceData.toString() + "  " + voiceIco);
+      debugPrint("振幅大小   $voiceData  $voiceIco");
     });
   }
 
   ///显示录音悬浮布局
   buildOverLayView(BuildContext context) {
     if (overlayEntry == null) {
-      overlayEntry = new OverlayEntry(builder: (content) {
+      overlayEntry = OverlayEntry(builder: (content) {
+        debugPrint("total:$_countTotal   count:$_count");
         return CustomOverlay(
-          icon: Column(
-            children: <Widget>[
-              Container(
-                margin: const EdgeInsets.only(top: 10),
-                child: _countTotal - _count < 11
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 15.0),
-                          child: Text(
-                            (_countTotal - _count).toString(),
-                            style: TextStyle(
-                              fontSize: 70.0,
-                              color: Colors.white,
+          icon: SingleChildScrollView(
+            child: Column(
+              children: <Widget>[
+                Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  child: _countTotal - _count < 11
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 15.0),
+                            child: Text(
+                              (_countTotal - _count).toString(),
+                              style: TextStyle(
+                                fontSize: 70.0,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
+                        )
+                      : Image.asset(
+                          voiceIco,
+                          width: 100,
+                          height: 100,
+                          package: 'flutter_plugin_record',
                         ),
-                      )
-                    : new Image.asset(
-                        voiceIco,
-                        width: 100,
-                        height: 100,
-                        package: 'flutter_plugin_record',
-                      ),
-              ),
-              Container(
-//                      padding: const EdgeInsets.only(right: 20, left: 20, top: 0),
-                child: Text(
+                ),
+                Text(
                   toastShow,
                   style: TextStyle(
                     fontStyle: FontStyle.normal,
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 12,
                   ),
-                ),
-              )
-            ],
+                )
+              ],
+            ),
           ),
         );
       });
-      Overlay.of(context)!.insert(overlayEntry!);
+      Overlay.of(context).insert(overlayEntry!);
     }
   }
 
@@ -194,16 +197,16 @@ class _VoiceWidgetState extends State<VoiceWidget> {
     }
 
     if (isUp) {
-      print("取消发送");
+      debugPrint("取消发送");
     } else {
-      print("进行发送");
+      debugPrint("进行发送");
     }
   }
 
   moveVoiceView() {
     // print(offset - start);
     setState(() {
-      isUp = starty - offset > 100 ? true : false;
+      isUp = starty - offset > widget.cancelHeight ? true : false;
       if (isUp) {
         textShow = "松开手指,取消发送";
         toastShow = textShow;
@@ -216,28 +219,27 @@ class _VoiceWidgetState extends State<VoiceWidget> {
 
   ///初始化语音录制的方法
   void _init() async {
-    recordPlugin?.init();
+    recordPlugin.init();
   }
 
   ///开始语音录制的方法
   void start() async {
-    recordPlugin?.start();
+    recordPlugin.start();
   }
 
   ///停止语音录制的方法
   void stop() {
-    recordPlugin?.stop();
+    recordPlugin.stop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      child: GestureDetector(
+    return GestureDetector(
         onLongPressStart: (details) {
           starty = details.globalPosition.dy;
           _timer = Timer.periodic(Duration(milliseconds: 1000), (t) {
             _count++;
-            print('_count is 👉 $_count');
+            debugPrint('_count is 👉 $_count');
             if (_count == _countTotal) {
               hideVoiceView();
             }
@@ -251,29 +253,39 @@ class _VoiceWidgetState extends State<VoiceWidget> {
           offset = details.globalPosition.dy;
           moveVoiceView();
         },
-        child: Container(
-          height: widget.height ?? 60,
-          // color: Colors.blue,
-          decoration: widget.decoration ??
-              BoxDecoration(
-                borderRadius: new BorderRadius.circular(6.0),
-                border: Border.all(width: 1.0, color: Colors.grey.shade200),
-              ),
-          margin: widget.margin ?? EdgeInsets.fromLTRB(50, 0, 50, 20),
-          child: Center(
-            child: Text(
-              textShow,
-            ),
-          ),
-        ),
-      ),
-    );
+        child:
+            widget.builder.call(textShow, DefaultVoiceWidget(text: textShow)));
   }
 
   @override
   void dispose() {
-    recordPlugin?.dispose();
+    recordPlugin.dispose();
     _timer?.cancel();
     super.dispose();
+  }
+}
+
+class DefaultVoiceWidget extends StatelessWidget {
+  final String text;
+
+  const DefaultVoiceWidget({
+    super.key,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6.0),
+        border: Border.all(width: 1.0, color: Colors.grey.shade200),
+      ),
+      margin: EdgeInsets.fromLTRB(50, 0, 50, 20),
+      child: Center(
+        child: Text(
+          text,
+        ),
+      ),
+    );
   }
 }
